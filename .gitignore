@@ -35,8 +35,10 @@ backend/evals/results.json
 
 # Repo-only docs (kept local; not needed for the deployed app)
 AGENT.md
+job.md
 son_of_anton_PRD.md
 son_of_anton_master_doc.md
+son_of_anton_v1_fix_prd.md
 
 # NOTE: `resume_x1.pdf` and `linkedIn_data/` ARE tracked in git.
 # The Dockerfile needs them at build time to ingest the knowledge base.
