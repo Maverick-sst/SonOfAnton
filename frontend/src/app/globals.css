@@ -1,0 +1,286 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── DESIGN.md → shadcn token mapping (dark cinematic variant) ───────────
+   Source: /DESIGN.md (ElevenLabs design analysis)
+   - canvas-deep        → --background   (#0c0a09)
+   - surface-dark       → --background   (#0c0a09) — same as ink
+   - surface-dark-elev  → --card         (#1c1917)
+   - on-dark            → --foreground   (#ffffff)
+   - on-dark-soft       → --muted-foreground (#a8a29e)
+   - hairline (dark)    → --border       (custom, ~#292524 / 1c1917+)
+   - gradient-sky       → --accent       (#a8c8e8)
+   - gradient-lavender  → --accent-2     (#c8b8e0)
+   Pill geometry: --radius = 0.625rem (kept from shadcn base-nova)
+*/
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light root — kept for parity, but the app is dark by default. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* Dark root — the actual app palette. Mirrors DESIGN.md's
+   canvas-deep / surface-dark-elevated / on-dark-soft. */
+.dark {
+  --background: #0c0a09;            /* canvas-deep / surface-dark */
+  --foreground: #f5f5f5;            /* on-dark */
+  --card: #1c1917;                  /* surface-dark-elevated */
+  --card-foreground: #f5f5f5;
+  --popover: #1c1917;
+  --popover-foreground: #f5f5f5;
+  --primary: #f5f5f5;               /* ink-pill on dark */
+  --primary-foreground: #0c0a09;
+  --secondary: #1c1917;
+  --secondary-foreground: #f5f5f5;
+  --muted: #1c1917;
+  --muted-foreground: #a8a29e;      /* on-dark-soft */
+  --accent: #a8c8e8;                /* gradient-sky (Orb / LiveWaveform) */
+  --accent-foreground: #0c0a09;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: rgba(245, 245, 245, 0.08);   /* hairline on dark */
+  --input: rgba(245, 245, 245, 0.12);
+  --ring: #a8c8e8;
+  --chart-1: #a8c8e8;
+  --chart-2: #c8b8e0;
+  --chart-3: #a7e5d3;
+  --chart-4: #f4c5a8;
+  --chart-5: #e8b8c4;
+  --sidebar: #1c1917;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #a8c8e8;
+  --sidebar-primary-foreground: #0c0a09;
+  --sidebar-accent: #1c1917;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: rgba(245, 245, 245, 0.08);
+  --sidebar-ring: #a8c8e8;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  html {
+    @apply font-sans;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  ::selection {
+    background: rgba(168, 200, 232, 0.25);
+    color: #f5f5f5;
+  }
+}
+
+/* ─── Orb (CSS-rendered 3D-feeling sphere) ─────────────────────────────────
+   The PRD asks for `["#CADCFC", "#1a1a2e"]` but DESIGN.md gradient-sky
+   (#a8c8e8) is the canonical ElevenLabs atmospheric token. The default
+   colors prop accepts any [light, dark] pair, so callers can override.
+*/
+.orb {
+  --orb-color-1: #a8c8e8;
+  --orb-color-2: #0c0a09;
+  --vol-in: 0;
+  --vol-out: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  position: relative;
+  isolation: isolate;
+  filter: drop-shadow(0 0 24px color-mix(in oklab, var(--orb-color-1) 30%, transparent));
+  animation: orb-breath 6s ease-in-out infinite, orb-spin 24s linear infinite;
+}
+
+.orb__halo,
+.orb__sphere,
+.orb__highlight {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+}
+
+.orb__halo {
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklab, var(--orb-color-1) 30%, transparent) 0%,
+    transparent 70%
+  );
+  filter: blur(20px);
+  transform: scale(1.15);
+  z-index: -1;
+}
+
+.orb__sphere {
+  background:
+    radial-gradient(
+      circle at 30% 28%,
+      color-mix(in oklab, var(--orb-color-1) 95%, white 5%) 0%,
+      var(--orb-color-1) 25%,
+      color-mix(in oklab, var(--orb-color-1) 50%, var(--orb-color-2)) 65%,
+      var(--orb-color-2) 100%
+    );
+  box-shadow:
+    inset -8px -12px 24px rgba(0, 0, 0, 0.55),
+    inset 8px 8px 24px rgba(255, 255, 255, 0.12);
+}
+
+.orb__highlight {
+  background: radial-gradient(
+    ellipse at 28% 22%,
+    rgba(255, 255, 255, calc(0.35 + var(--vol-out) * 0.4)) 0%,
+    transparent 45%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.orb--idle {
+  animation-duration: 6s, 24s;
+}
+.orb--thinking {
+  animation: orb-breath 1.4s ease-in-out infinite, orb-spin 6s linear infinite;
+}
+.orb--listening {
+  animation-duration: 3s, 18s;
+}
+.orb--talking {
+  animation-duration: 2s, 12s;
+}
+
+@keyframes orb-breath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
+}
+
+@keyframes orb-spin {
+  to { filter: hue-rotate(360deg) drop-shadow(0 0 24px color-mix(in oklab, var(--orb-color-1) 30%, transparent)); }
+}
+
+/* ─── LiveWaveform ─────────────────────────────────────────────────────────*/
+.live-waveform__bar {
+  display: inline-block;
+  width: 3px;
+  border-radius: 9999px;
+  background: var(--lw-bar-color, #a8c8e8);
+  transition: height 0.12s ease;
+  box-shadow: 0 0 8px color-mix(in oklab, var(--lw-bar-color, #a8c8e8) 50%, transparent);
+}
+
+.live-waveform--idle .live-waveform__bar {
+  opacity: 0.25;
+  height: 25% !important;
+}
+
+/* ─── ShimmeringText ───────────────────────────────────────────────────────*/
+.shimmering-text {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 30%,
+    color-mix(in oklab, var(--foreground) 95%, white 5%) 50%,
+    var(--muted-foreground) 70%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmering-text var(--shimmer-duration, 2.4s) linear infinite;
+}
+
+@keyframes shimmering-text {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ─── Custom scrollbar (chat) ──────────────────────────────────────────────*/
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(245, 245, 245, 0.08);
+  border-radius: 9999px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 245, 245, 0.16);
+}

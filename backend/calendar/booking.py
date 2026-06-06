@@ -3,10 +3,19 @@ Booking Service — Create GCal interview event.
 """
 from backend.calendar.auth import get_calendar_service
 from backend.config import settings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 def book_interview(start_time: datetime, recruiter_name: str, recruiter_email: str, recruiter_company: str = "") -> dict:
     service = get_calendar_service()
+    IST = ZoneInfo("Asia/Kolkata")
+    
+    # Ensure start_time is timezone-aware in IST
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc).astimezone(IST)
+    else:
+        start_time = start_time.astimezone(IST)
+        
     end_time = start_time + timedelta(minutes=30)
     event = {
         "summary": f"Interview: Rehan ↔ {recruiter_name} ({recruiter_company})",
