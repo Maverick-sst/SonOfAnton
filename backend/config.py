@@ -18,16 +18,29 @@ class Settings(BaseSettings):
 
     # ─── OpenAI ──────────────────────────────────────────────────────────────
     OPENAI_API_KEY: str
-    OPENAI_CHAT_MODEL: str = "gpt-4o"
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
     OPENAI_VOICE_MODEL: str = "gpt-4o-mini"
 
     # ─── GitHub ──────────────────────────────────────────────────────────────
     GITHUB_TOKEN: str
     GITHUB_REPOS: str = "Maverick-sst/Anton,Maverick-sst/odysseus,Maverick-sst/terax-ai,Musharraf1128/Morph,Maverick-sst/Stratum,Maverick-sst/DevForge,Maverick-sst/Doable,Maverick-sst/MisoTTS"
 
-    # ─── Retell AI (Voice) ───────────────────────────────────────────────────
-    RETELL_API_KEY: str = ""
-    RETELL_SECRET_KEY: str = ""
+    # ─── Vapi (Voice) ────────────────────────────────────────────────────────
+    VAPI_API_KEY: str = ""
+    VAPI_PHONE_NUMBER_ID: str = ""
+    VAPI_ASSISTANT_ID: str = ""
+    VAPI_SERVER_SECRET: str = ""
+
+    # ─── Twilio (Phone number imported into Vapi) ─────────────────────────────
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_PHONE_NUMBER: str = ""
+
+    # ─── Local dev (ngrok) ────────────────────────────────────────────────────
+    # Set to the ngrok https URL during local development.
+    # Leave empty in production; the deployed URL is hard-coded into the
+    # Vapi assistant when you run backend/scripts/create_vapi_assistant.py.
+    BACKEND_PUBLIC_URL: str = ""
 
     # ─── Redis (Upstash) ─────────────────────────────────────────────────────
     REDIS_URL: str

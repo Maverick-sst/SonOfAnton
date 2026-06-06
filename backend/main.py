@@ -6,7 +6,7 @@ Entrypoint for backend server. Runs routes and middlewares.
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api import chat, voice, health
+from backend.api import chat, vapi, health
 from backend.database import init_db, log_latency
 from backend.config import settings
 import time
@@ -23,9 +23,10 @@ async def lifespan(app: FastAPI):
     try:
         from backend.knowledge.vector_store import get_chroma_collection
         from backend.knowledge.embeddings import get_embedder
-        # Trigger singletons
+        # Trigger singletons and warm up embedding service
         get_chroma_collection()
-        get_embedder()
+        embedder = get_embedder()
+        embedder.embed_query("warmup")
         print("[Startup] Scaffolding complete and warm.")
     except Exception as e:
         print(f"[Startup] WARNING: Pre-warming failed: {e}")
@@ -57,7 +58,7 @@ async def latency_middleware(request: Request, call_next):
     latency_ms = int((time.time() - start_time) * 1000)
     
     # Log latency to DB asynchronously (non-blocking)
-    if request.url.path in ["/chat", "/voice/webhook"]:
+    if request.url.path in ["/chat", "/vapi/chat"]:
         session_id = None
         # Try to retrieve session_id from headers/query if present for correlation
         if "session-id" in request.headers:
@@ -71,7 +72,7 @@ async def latency_middleware(request: Request, call_next):
 
 # Mount routes
 app.include_router(chat.router)
-app.include_router(voice.router)
+app.include_router(vapi.router)
 app.include_router(health.router)
 
 @app.get("/")

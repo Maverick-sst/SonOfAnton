@@ -30,6 +30,8 @@ psycopg2-binary==2.9.9
 # Observability
 langsmith==0.1.131
 
-# Voice API
-retell-sdk==5.48.0
+# Voice API (Vapi)
+# Vapi is plain REST — httpx is the only client we need for the
+# assistant-creation / phone-number-assignment scripts.
+httpx==0.27.2
 
