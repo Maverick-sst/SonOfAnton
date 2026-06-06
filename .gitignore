@@ -1,0 +1,40 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+backend/.venv/
+
+# ChromaDB persisted data
+data/chroma/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials
+backend/data/credentials.json
+backend/data/token.json
+
+# Eval results
+backend/evals/results.json
+
+AGENT.md
+linkedIn_data/
+resume_x1.pdf
+son_of_anton_PRD.md
+son_of_anton_master_doc.md

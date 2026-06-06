@@ -1,0 +1,35 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# LLM & Agent
+openai==1.51.0
+langchain==0.3.1
+langchain-openai==0.2.1
+langchain-community==0.3.1
+langgraph==0.2.28
+
+# Knowledge
+chromadb==0.5.5
+pdfplumber==0.11.4
+PyGithub==2.4.0
+
+# Memory & Cache
+redis==5.1.1
+
+# Calendar
+google-api-python-client==2.147.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Observability
+langsmith==0.1.131
+
+# Voice API
+retell-sdk==5.48.0
+
