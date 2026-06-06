@@ -21,11 +21,13 @@ import hashlib
 import json
 import logging
 import time
+import asyncio
 
 from backend.config import settings
 from backend.orchestrator.graph import get_graph
 from backend.orchestrator.nodes.response_node import stream_voice_response
 from backend.memory.session_store import save_message
+from backend.database import log_voice_eval
 
 logger = logging.getLogger(__name__)
 
@@ -203,13 +205,20 @@ async def vapi_custom_llm(request: Request):
     except Exception as e:
         logger.warning(f"[Vapi] Redis save failed (non-fatal): {e}")
 
+    # Track first token latency
+    call_start_time = time.time()
+    first_token_time = None
+
     async def event_stream() -> AsyncIterator[str]:
+        nonlocal first_token_time
         first = True
         emitted_any = False
         try:
             async for token in stream_voice_response(final_state):
                 if not token:
                     continue
+                if first and first_token_time is None:
+                    first_token_time = time.time()
                 yield _sse_chunk(completion_id, token, first=first)
                 first = False
                 emitted_any = True
@@ -226,6 +235,20 @@ async def vapi_custom_llm(request: Request):
                 return
 
         yield _sse_final(completion_id)
+        
+        # Log voice metrics after streaming completes
+        if first_token_time:
+            first_response_latency_ms = int((first_token_time - call_start_time) * 1000)
+            try:
+                log_voice_eval(
+                    session_id=session_id,
+                    call_id=call_id,
+                    first_response_latency_ms=first_response_latency_ms,
+                    transcript=final_text,
+                )
+                logger.info(f"[Vapi] Call {call_id} first_response_latency={first_response_latency_ms}ms")
+            except Exception as e:
+                logger.warning(f"[Vapi] Failed to log voice metrics: {e}")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -311,12 +334,28 @@ async def vapi_webhook(
         transcript = message.get("transcript", "")
         recording_url = message.get("recordingUrl", "")
         duration = message.get("durationSeconds")
+        cost = message.get("cost")
+        first_response_latency_ms = message.get("firstResponseLatencyMs")
+        
         logger.info(
             f"[Vapi] Call {call_id} ended. "
             f"transcript_len={len(transcript) if isinstance(transcript, str) else 'n/a'} "
-            f"duration={duration}s recording={recording_url}"
+            f"duration={duration}s recording={recording_url} cost={cost}"
         )
-        # Per PRD §12 — no DB writes; logging only.
+        
+        # Log end-of-call metrics
+        try:
+            log_voice_eval(
+                session_id=f"voice_{call_id}",
+                call_id=call_id,
+                first_response_latency_ms=first_response_latency_ms,
+                transcript=transcript,
+                duration_seconds=duration,
+                recording_url=recording_url,
+                cost=cost,
+            )
+        except Exception as e:
+            logger.warning(f"[Vapi] Failed to log end-of-call metrics: {e}")
 
     elif event_type == "function-call":
         fn = message.get("functionCall") or {}

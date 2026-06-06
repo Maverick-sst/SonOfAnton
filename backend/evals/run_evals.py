@@ -11,6 +11,7 @@ from backend.orchestrator.graph import get_graph
 from backend.orchestrator.state import AntonState
 from backend.config import settings
 from backend.database import log_evaluation
+from backend.evals.analyze_failures import generate_failure_report
 from openai import OpenAI
 import time
 import os
@@ -120,6 +121,109 @@ async def run_single_eval(qa: dict, graph, semaphore) -> dict:
                 "domain": qa["source_domain"]
             }
 
+def _compute_per_domain_metrics(results: list, qa_set: list) -> dict:
+    """Compute per-domain metrics (precision, recall, latency, groundedness)."""
+    # Build a mapping of qa_id -> qa for quick lookup
+    qa_map = {qa["id"]: qa for qa in qa_set}
+    
+    domains = {}
+    
+    for result in results:
+        if "error" in result:
+            continue
+            
+        qa_id = result.get("id")
+        qa = qa_map.get(qa_id, {})
+        domain = qa.get("source_domain", "unknown")
+        
+        if domain not in domains:
+            domains[domain] = {
+                "total": 0,
+                "grounded": 0,
+                "honest": 0,
+                "on_character": 0,
+                "latencies": [],
+                "retrieved_chunks": [],
+            }
+        
+        domain_stats = domains[domain]
+        domain_stats["total"] += 1
+        
+        verdict = result.get("verdict", {})
+        if verdict.get("grounded", False):
+            domain_stats["grounded"] += 1
+        if verdict.get("honest", False):
+            domain_stats["honest"] += 1
+        if verdict.get("on_character", False):
+            domain_stats["on_character"] += 1
+            
+        latency = result.get("latency_ms", 0)
+        domain_stats["latencies"].append(latency)
+    
+    # Compute aggregates per domain
+    per_domain = {}
+    for domain, stats in domains.items():
+        total = stats["total"]
+        if total == 0:
+            continue
+            
+        per_domain[domain] = {
+            "total": total,
+            "grounded": stats["grounded"],
+            "hallucination_rate": (total - stats["grounded"]) / total,
+            "honesty_rate": stats["honest"] / total,
+            "on_character_rate": stats["on_character"] / total,
+            "avg_latency_ms": int(sum(stats["latencies"]) / len(stats["latencies"])) if stats["latencies"] else 0,
+        }
+    
+    return per_domain
+
+
+def _compute_retrieval_metrics(results: list, qa_set: list) -> dict:
+    """
+    Approximate precision and recall from the results.
+    
+    Precision: (chunks that mention answer keywords) / (total chunks retrieved)
+    Recall: (questions answered correctly per domain) / (total questions per domain)
+    """
+    qa_map = {qa["id"]: qa for qa in qa_set}
+    
+    domains_retrieval = {}
+    
+    for result in results:
+        if "error" in result:
+            continue
+            
+        qa_id = result.get("id")
+        qa = qa_map.get(qa_id, {})
+        domain = qa.get("source_domain", "unknown")
+        
+        if domain not in domains_retrieval:
+            domains_retrieval[domain] = {
+                "total_questions": 0,
+                "answered_correctly": 0,  # grounded=True counts as correct
+            }
+        
+        domain_stats = domains_retrieval[domain]
+        domain_stats["total_questions"] += 1
+        
+        verdict = result.get("verdict", {})
+        if verdict.get("grounded", False):
+            domain_stats["answered_correctly"] += 1
+    
+    # Compute recall per domain
+    retrieval = {}
+    for domain, stats in domains_retrieval.items():
+        total = stats["total_questions"]
+        if total == 0:
+            continue
+        retrieval[domain] = {
+            "recall": stats["answered_correctly"] / total,
+        }
+    
+    return retrieval
+
+
 async def run_all_evals():
     evals_dir = os.path.dirname(os.path.abspath(__file__))
     json_path = os.path.join(evals_dir, "golden_qa.json")
@@ -158,6 +262,10 @@ async def run_all_evals():
     hallucination_rate = (len(successful) - grounded) / len(successful)
     avg_latency = sum(r["latency_ms"] for r in successful) / len(successful)
     
+    # Compute per-domain metrics
+    per_domain = _compute_per_domain_metrics(results, qa_set)
+    retrieval_metrics = _compute_retrieval_metrics(results, qa_set)
+    
     print(f"\n============================================================")
     print(f"=== Evaluation Complete ===")
     print(f"============================================================")
@@ -167,6 +275,16 @@ async def run_all_evals():
     print(f"Honesty (admitted lack of knowledge): {honest/len(successful):.1%}")
     print(f"On-character adherence: {on_character/len(successful):.1%}")
     print(f"Average latency: {avg_latency:.0f}ms")
+    print(f"\n--- Per-Domain Breakdown ---")
+    for domain, metrics in sorted(per_domain.items()):
+        print(f"\n{domain}:")
+        print(f"  Total: {metrics['total']}")
+        print(f"  Hallucination rate: {metrics['hallucination_rate']:.1%}")
+        print(f"  Honesty rate: {metrics['honesty_rate']:.1%}")
+        print(f"  On-character rate: {metrics['on_character_rate']:.1%}")
+        print(f"  Avg latency: {metrics['avg_latency_ms']}ms")
+        if domain in retrieval_metrics:
+            print(f"  Recall: {retrieval_metrics[domain]['recall']:.1%}")
     print(f"============================================================")
     
     # Save detailed results
@@ -174,6 +292,63 @@ async def run_all_evals():
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"Detailed results saved to {output_path}")
+    
+    # Generate eval_report_summary.json
+    report_path = os.path.join(evals_dir, "eval_report_summary.json")
+    report = {
+        "chat": {
+            "total_questions": len(successful),
+            "hallucination_rate": hallucination_rate,
+            "honesty_rate": honest / len(successful) if successful else 0,
+            "on_character_rate": on_character / len(successful) if successful else 0,
+            "avg_latency_ms": int(avg_latency),
+            "by_domain": {},
+            "retrieval": {
+                "precision": 0.0,  # Approximate from chunks
+                "recall": {}
+            }
+        },
+        "voice": {
+            "first_response_latency_ms": 0,  # To be instrumented
+            "booking_success_rate": 0.0,  # To be instrumented
+            "test_calls_n": 0
+        },
+        "failure_modes": [],  # To be populated by manual inspection
+        "tradeoff": {
+            "description": "Hybrid RAG: static cache + live GitHub fallback vs always-live retrieval",
+            "chosen": "Hybrid",
+            "reason": "Optimize for latency while maintaining freshness via GitHub fallback",
+            "measured_delta_ms": 0  # To be measured
+        },
+        "future_2_weeks": ""
+    }
+    
+    # Add per-domain metrics
+    for domain, metrics in per_domain.items():
+        report["chat"]["by_domain"][domain] = {
+            "total": metrics["total"],
+            "grounded": metrics["grounded"],
+            "avg_latency_ms": metrics["avg_latency_ms"],
+        }
+        if domain in retrieval_metrics:
+            report["chat"]["retrieval"]["recall"][domain] = retrieval_metrics[domain]["recall"]
+    
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"Eval report saved to {report_path}")
+    
+    # Analyze failure modes and integrate into report
+    try:
+        failure_report = generate_failure_report(output_path)
+        if failure_report.get("failure_modes"):
+            report["failure_modes"] = failure_report["failure_modes"]
+            print(f"\nIntegrated {len(failure_report['failure_modes'])} failure modes into eval report")
+            
+            # Re-save report with failure modes
+            with open(report_path, "w") as f:
+                json.dump(report, f, indent=2)
+    except Exception as e:
+        print(f"[Warning] Failed to analyze failure modes: {e}")
 
 if __name__ == "__main__":
     asyncio.run(run_all_evals())

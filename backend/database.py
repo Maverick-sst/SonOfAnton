@@ -74,6 +74,21 @@ def init_db():
             );
         """)
         
+        # Voice Eval Logs Table (for call quality metrics)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS voice_eval_logs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id VARCHAR(255),
+                call_id VARCHAR(255) UNIQUE,
+                first_response_latency_ms INTEGER,
+                transcript TEXT,
+                duration_seconds INTEGER,
+                recording_url TEXT,
+                cost FLOAT,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        
         conn.commit()
         cur.close()
         conn.close()
@@ -145,3 +160,48 @@ def log_evaluation(
         conn.close()
     except Exception as e:
         print(f"[Database] Error logging evaluation: {e}")
+
+
+def log_voice_eval(
+    session_id: str,
+    call_id: str,
+    first_response_latency_ms: Optional[int] = None,
+    transcript: Optional[str] = None,
+    duration_seconds: Optional[int] = None,
+    recording_url: Optional[str] = None,
+    cost: Optional[float] = None,
+):
+    """Log voice call quality metrics to voice_eval_logs table."""
+    db_url = settings.db_url
+    if not db_url:
+        return
+        
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO voice_eval_logs (
+                session_id, call_id, first_response_latency_ms, 
+                transcript, duration_seconds, recording_url, cost
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (call_id) DO UPDATE SET
+                first_response_latency_ms = EXCLUDED.first_response_latency_ms,
+                transcript = EXCLUDED.transcript,
+                duration_seconds = EXCLUDED.duration_seconds,
+                recording_url = EXCLUDED.recording_url,
+                cost = EXCLUDED.cost
+        """, (
+            session_id,
+            call_id,
+            first_response_latency_ms,
+            transcript,
+            duration_seconds,
+            recording_url,
+            cost
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[Database] Error logging voice eval: {e}")
