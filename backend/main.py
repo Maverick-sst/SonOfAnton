@@ -18,6 +18,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://son-of-anton.vercel.app",
     "https://son-of-anton-git-main.vercel.app",
+    "https://son-of-anton-xi.vercel.app",
 ]
 if os.environ.get("VERCEL_PREVIEW_URL"):
     ALLOWED_ORIGINS.append(os.environ["VERCEL_PREVIEW_URL"])
