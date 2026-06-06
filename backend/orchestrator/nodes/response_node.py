@@ -199,3 +199,52 @@ async def stream_voice_response(state: AntonState) -> AsyncIterator[str]:
 
     async for token in _stream_chitchat_response(state):
         yield token
+
+
+async def _chunk_text(text: str, chunk_size: int = 24) -> AsyncIterator[str]:
+    """
+    Yield `text` in small character slices. Visual streaming only — the
+    final_response has already been computed by graph.ainvoke(); this lets
+    the chat SSE client render the answer progressively without an extra
+    LLM hop.
+    """
+    if not text:
+        return
+    for i in range(0, len(text), chunk_size):
+        yield text[i:i + chunk_size]
+
+
+async def stream_chat_response(state: AntonState) -> AsyncIterator[str]:
+    """
+    Async generator that streams the final chat-channel response.
+
+    Chat differs from voice in two ways:
+      - Markdown formatting is preserved (the UI renders it).
+      - No TTS reformat hop (it was already computed by graph.ainvoke and
+        lives in `state['final_response']`).
+
+    Mirrors the dispatch in `run()`:
+      - scheduling_answer → chunk and yield (preserves the plain-text
+                            scheduling wizard sentences)
+      - knowledge_answer  → chunk and yield from `final_response`
+      - chitchat          → chunk and yield from `final_response`
+      - empty             → yield a one-shot greeting
+
+    The caller is responsible for wrapping each yielded string in SSE
+    format. Does not mutate state.
+    """
+    final = (
+        state.get("final_response")
+        or state.get("scheduling_answer")
+        or state.get("knowledge_answer")
+    )
+    if final:
+        async for piece in _chunk_text(final):
+            yield piece
+        return
+
+    yield (
+        "Hi! I'm Anton, Rehan's AI representative. "
+        "I can tell you about his background, projects, and skills, "
+        "or help schedule an interview. What would you like to know?"
+    )

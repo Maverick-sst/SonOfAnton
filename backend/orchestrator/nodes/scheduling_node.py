@@ -6,6 +6,7 @@ Also handles reschedule and cancel sub-flows.
 
 import re
 import json
+import time
 from datetime import datetime, timedelta
 from backend.orchestrator.state import AntonState
 from backend.memory.session_store import get_redis_client
@@ -22,6 +23,8 @@ def _get_client():
 
 RESCHEDULE_KEYWORDS = ["reschedule", "change the time", "move the interview", "different time", "postpone"]
 CANCEL_KEYWORDS = ["cancel", "don't need", "won't be able", "not happening", "withdraw", "delete the interview"]
+NEW_BOOKING_KEYWORDS = ["book", "schedule", "set up", "arrange", "another interview", "new interview"]
+WHEN_QUESTION_RE = re.compile(r"\b(when|what time|what day|what date|on which day|which day|date of)\b", re.IGNORECASE)
 
 
 def run(state: AntonState) -> AntonState:
@@ -30,6 +33,12 @@ def run(state: AntonState) -> AntonState:
         return _handle_reschedule(state)
     if any(kw in message for kw in CANCEL_KEYWORDS):
         return _handle_cancel(state)
+    sched_state = _load_sched_state(state["session_id"])
+    if sched_state.get("step") == "DONE" and any(kw in message for kw in NEW_BOOKING_KEYWORDS):
+        new_state = {**sched_state, "step": "INIT"}
+        for stale_key in ("slots", "selected_slot", "booked_slot", "event_id", "reschedule_step", "cancel_step", "requested_date"):
+            new_state.pop(stale_key, None)
+        _save_sched_state(state["session_id"], new_state)
     return _handle_booking(state)
 
 
@@ -38,6 +47,10 @@ def _handle_booking(state: AntonState) -> AntonState:
     sched_state = _load_sched_state(session_id)
     step = sched_state.get("step", "INIT")
     message = state["user_message"]
+
+    requested_date = sched_state.get("requested_date") or _extract_date(message)
+    if requested_date:
+        sched_state["requested_date"] = requested_date
 
     if step in ("INIT", "ASK_NAME"):
         name = state.get("recruiter_name") or _extract_name(message)
@@ -58,18 +71,31 @@ def _handle_booking(state: AntonState) -> AntonState:
     if step == "SHOW_SLOTS":
         try:
             from backend.calendar.availability import get_available_slots
-            start = datetime.utcnow() + timedelta(days=1)
+            from zoneinfo import ZoneInfo
+            IST = ZoneInfo("Asia/Kolkata")
+            weekend_note = ""
+            requested = sched_state.get("requested_date")
+            if requested:
+                start = datetime.strptime(requested, "%Y-%m-%d").replace(tzinfo=IST)
+                while start.weekday() >= 5:
+                    start = start + timedelta(days=1)
+                if start.strftime("%Y-%m-%d") != requested:
+                    weekend_note = f"Heads up — {datetime.strptime(requested, '%Y-%m-%d').strftime('%A, %B %d')} is a weekend, so the earliest available is {start.strftime('%A, %B %d')}.\n\n"
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                start = datetime.now(IST) + timedelta(days=1)
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + timedelta(days=7)
             slots = get_available_slots(start, end)
         except Exception:
-            slots = _generate_mock_slots()
+            slots = _generate_mock_slots(sched_state.get("requested_date"))
         sched_state["slots"] = slots
         if not slots:
             _save_sched_state(session_id, {**sched_state, "step": "SHOW_SLOTS"})
             return {**state, "scheduling_answer": "Rehan doesn't seem to have availability next week. Could you suggest a different week?"}
         slot_list = "\n".join([f"{i+1}. {s['display']}" for i, s in enumerate(slots)])
         _save_sched_state(session_id, {**sched_state, "step": "CONFIRM_SLOT"})
-        return {**state, "scheduling_answer": f"Here are Rehan's available slots:\n{slot_list}\n\nWhich works for you? Just say the number."}
+        return {**state, "scheduling_answer": f"{weekend_note}Here are Rehan's available slots:\n{slot_list}\n\nWhich works for you? Just say the number."}
 
     if step == "CONFIRM_SLOT":
         slots = sched_state.get("slots", [])
@@ -90,15 +116,27 @@ def _handle_booking(state: AntonState) -> AntonState:
             print(f"[Scheduling] Google Calendar booking failed: {e}")
             event_id = "mock_event"
 
-        _save_sched_state(session_id, {"step": "DONE", "event_id": event_id})
-        
+        _save_sched_state(session_id, {
+            "step": "DONE",
+            "event_id": event_id,
+            "recruiter_name": sched_state["recruiter_name"],
+            "recruiter_email": sched_state["recruiter_email"],
+            "requested_date": sched_state.get("requested_date"),
+            "booked_slot": slot,
+        })
+
         if event_id == "mock_event":
             return {**state, "scheduling_answer": f"Done! I've noted your slot preference for {slot['display']}. Since my calendar integration is currently unconfigured or offline, Rehan will send you the invite manually. Looking forward to speaking with you!"}
         else:
             return {**state, "scheduling_answer": f"Done! I've booked an interview on {slot['display']}. A calendar invite has been sent to {sched_state['recruiter_email']}. Looking forward to speaking with you!"}
 
     if step == "DONE":
-        return {**state, "scheduling_answer": "The interview has already been scheduled! Would you like to reschedule or ask about something else?"}
+        booked_slot = sched_state.get("booked_slot")
+        if WHEN_QUESTION_RE.search(message):
+            if booked_slot:
+                return {**state, "scheduling_answer": f"Your interview is booked for {booked_slot['display']} with {sched_state.get('recruiter_name', 'you')}."}
+            return {**state, "scheduling_answer": "Your interview is already booked. Would you like to reschedule?"}
+        return {**state, "scheduling_answer": "The interview has already been scheduled! Would you like to reschedule, book another, or ask about something else?"}
 
     return {**state, "scheduling_answer": "How can I help with scheduling?"}
 
@@ -122,7 +160,18 @@ def _handle_reschedule(state: AntonState) -> AntonState:
             return {**state, "scheduling_answer": f"I couldn't find an upcoming interview under {email}. Are you sure that's the right email?"}
         try:
             from backend.calendar.availability import get_available_slots
-            slots = get_available_slots(datetime.utcnow() + timedelta(days=1), datetime.utcnow() + timedelta(days=8))
+            from zoneinfo import ZoneInfo
+            IST = ZoneInfo("Asia/Kolkata")
+            requested_date = _extract_date(state["user_message"])
+            if requested_date:
+                start = datetime.strptime(requested_date, "%Y-%m-%d").replace(tzinfo=IST)
+                while start.weekday() >= 5:
+                    start = start + timedelta(days=1)
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                start = datetime.now(IST) + timedelta(days=1)
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            slots = get_available_slots(start, start + timedelta(days=7))
         except Exception:
             slots = _generate_mock_slots()
         slot_list = "\n".join([f"{i+1}. {s['display']}" for i, s in enumerate(slots)])
@@ -195,7 +244,12 @@ def _save_sched_state(session_id, state):
     r = get_redis_client()
     if r:
         try:
-            r.setex(f"session:{session_id}:scheduling", 7200, json.dumps(state))
+            # Stamp the state with its last-update time so the router can
+            # detect stale wizard sessions. A user who closed the tab and
+            # came back hours later would otherwise get auto-prompted for
+            # the next wizard step on their very first "hi" message.
+            payload = {**state, "_updated_at": int(time.time())}
+            r.setex(f"session:{session_id}:scheduling", 7200, json.dumps(payload))
         except Exception:
             pass
 
@@ -305,9 +359,14 @@ def _extract_slot_selection(message, slots):
     # Fallback to LLM
     return _llm_extract_slot_selection(message, slots)
 
-def _generate_mock_slots():
+def _generate_mock_slots(requested_date: str | None = None):
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
     slots = []
-    base = datetime.utcnow().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    if requested_date:
+        base = datetime.strptime(requested_date, "%Y-%m-%d").replace(tzinfo=IST).replace(hour=9, minute=0, second=0, microsecond=0)
+    else:
+        base = datetime.now(IST).replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
     while base.weekday() >= 5: base += timedelta(days=1)
     for i in range(5):
         st = base + timedelta(hours=i*2)
@@ -317,3 +376,67 @@ def _generate_mock_slots():
             st = base.replace(hour=9)
         slots.append({"start": st.isoformat(), "end": (st+timedelta(minutes=30)).isoformat(), "display": st.strftime("%A, %B %d at %I:%M %p IST")})
     return slots
+
+
+def _llm_extract_date(message: str) -> str | None:
+    try:
+        c = _get_client()
+        today = datetime.now().strftime("%Y-%m-%d (%A)")
+        resp = c.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": f"Today is {today}. Extract any specific calendar date the user wants to schedule an interview for. Resolve relative phrases like 'tomorrow', 'next Friday', 'next week', 'this Monday' to a concrete YYYY-MM-DD. Output ONLY the date in YYYY-MM-DD format, or 'NONE' if no date was mentioned."},
+                {"role": "user", "content": message}
+            ],
+            temperature=0,
+            max_tokens=20
+        )
+        ans = resp.choices[0].message.content.strip()
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', ans):
+            return None
+        try:
+            parsed = datetime.strptime(ans, "%Y-%m-%d")
+            if parsed.date() < datetime.now().date():
+                return None
+            return ans
+        except ValueError:
+            return None
+    except Exception as e:
+        print(f"[Scheduling] LLM date extraction failed: {e}")
+        return None
+
+
+def _extract_date(message: str) -> str | None:
+    clean = message.lower()
+    months = {
+        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7, "aug": 8,
+        "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+    }
+    for name, num in months.items():
+        m = re.search(rf'\b(\d{{1,2}})(?:st|nd|rd|th)?\s+{name}\b', clean)
+        if m:
+            day = int(m.group(1))
+            try:
+                dt = datetime(datetime.now().year, num, day).date()
+                if dt < datetime.now().date():
+                    dt = datetime(datetime.now().year + 1, num, day).date()
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        m = re.search(rf'\b{name}\s+(\d{{1,2}})(?:st|nd|rd|th)?\b', clean)
+        if m:
+            day = int(m.group(1))
+            try:
+                dt = datetime(datetime.now().year, num, day).date()
+                if dt < datetime.now().date():
+                    dt = datetime(datetime.now().year + 1, num, day).date()
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+    if "day after tomorrow" in clean:
+        return (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+    if "tomorrow" in clean:
+        return (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    return _llm_extract_date(message)

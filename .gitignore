@@ -26,15 +26,18 @@ frontend/.next/
 .DS_Store
 Thumbs.db
 
-# Credentials
+# Credentials (NEVER commit — paste GOOGLE_TOKEN_JSON env var instead)
 backend/data/credentials.json
 backend/data/token.json
 
-# Eval results
+# Eval results (regenerable)
 backend/evals/results.json
 
+# Repo-only docs (kept local; not needed for the deployed app)
 AGENT.md
-linkedIn_data/
-resume_x1.pdf
 son_of_anton_PRD.md
 son_of_anton_master_doc.md
+
+# NOTE: `resume_x1.pdf` and `linkedIn_data/` ARE tracked in git.
+# The Dockerfile needs them at build time to ingest the knowledge base.
+# They are the candidate's own resume + LinkedIn export — public-facing data.

@@ -18,6 +18,28 @@ from backend.knowledge.embeddings import get_embedder
 SECTION_HEADER_PATTERN = re.compile(r'^[A-Z][A-Z\s]{3,}$', re.MULTILINE)
 
 
+# Curated list of common resume section headers. The original splitter only
+# recognised ALL-CAPS lines, which meant a header like "Technical Skills"
+# (Title Case) was never detected — and the skills list ended up merged into
+# the previous section (typically Education). Adding this allowlist lets the
+# splitter recognise the headers that real resumes actually use.
+KNOWN_SECTION_HEADERS = {
+    "about", "summary", "profile", "objective", "contact", "contacts",
+    "education", "academic", "academics", "qualifications",
+    "experience", "work experience", "employment",
+    "professional experience", "work history", "career",
+    "projects", "personal projects", "academic projects", "key projects",
+    "skills", "technical skills", "skills & tools", "skills and tools",
+    "core competencies", "tech stack", "technologies", "tech",
+    "certifications", "certificates", "licenses",
+    "achievements", "awards", "honors", "honors and awards",
+    "publications", "research", "patents",
+    "interests", "hobbies", "activities",
+    "references", "volunteer", "volunteering",
+    "extracurricular", "extracurriculars",
+}
+
+
 def ingest_resume(pdf_path: str) -> int:
     """
     Parse and ingest a resume PDF into ChromaDB.
@@ -41,6 +63,19 @@ def ingest_resume(pdf_path: str) -> int:
     collection = get_chroma_collection()
     embedder = get_embedder()
 
+    # Wipe stale resume chunks before re-ingesting. The doc_id format
+    # changed (sections are now first-class) so re-running without a wipe
+    # would leave orphan chunks with the old "resume_general_*" ids that
+    # are no longer referenced by any section name. Those orphans would
+    # pollute retrieval with stale, un-sectioned content.
+    try:
+        existing = collection.get(where={"source": "resume"}, include=[])
+        if existing and existing.get("ids"):
+            collection.delete(ids=existing["ids"])
+            print(f"[Resume] Wiped {len(existing['ids'])} stale resume chunks")
+    except Exception as e:
+        print(f"[Resume] WARNING: failed to wipe stale chunks: {e}")
+
     total = 0
     for section_name, section_text in sections.items():
         if not section_text.strip():
@@ -51,11 +86,20 @@ def ingest_resume(pdf_path: str) -> int:
 
         chunks = splitter.split_text(section_text)
         for i, chunk in enumerate(chunks):
-            embedding = embedder.embed_query(chunk)
+            # Prefix the chunk with its section name. Without this, a chunk
+            # in the "Technical Skills" section that starts with
+            # "Languages: Java, JavaScript, ..." has poor semantic overlap
+            # with a query like "what are rehan's skills" — the section
+            # name never appears in the chunk text. Prepending the section
+            # name keeps the LLM grounded AND raises the chunk's embedding
+            # similarity to skills/tech/stack queries.
+            header = f"[Section: {section_name}]\n"
+            chunk_with_header = header + chunk
+            embedding = embedder.embed_query(chunk_with_header)
             doc_id = f"resume_{section_name.lower().replace(' ', '_')}_{i}"
 
             collection.upsert(
-                documents=[chunk],
+                documents=[chunk_with_header],
                 embeddings=[embedding],
                 metadatas=[{
                     "source": "resume",
@@ -68,6 +112,40 @@ def ingest_resume(pdf_path: str) -> int:
             )
             total += 1
             print(f"  [Resume] Section '{section_name}' chunk {i}: {len(chunk)} chars")
+
+        # Skills meta-chunk. The raw Technical Skills chunks are dominated
+        # by concrete tech terms ("Java", "TypeScript", "MERN", ...) which
+        # have weak semantic overlap with short generic queries like
+        # "what are rehan's skills" or "his tech stack" — those queries
+        # never share embeddings with the tech terms, so the chunk ranks
+        # below the retrieval threshold. To fix this, we emit one extra
+        # dense-summary chunk whose text is tuned to match the kinds of
+        # phrasings recruiters actually use. The summary content is
+        # assembled from the section text, not invented, so it remains
+        # grounded.
+        if section_name.lower() in {"technical skills", "skills", "skills & tools", "skills and tools"}:
+            summary_text = (
+                f"[Section: {section_name}]\n"
+                f"Rehan's technical skills, technologies, languages, frameworks, "
+                f"and developer tools.\n\n{section_text.strip()}"
+            )
+            summary_id = f"resume_{section_name.lower().replace(' ', '_')}_summary"
+            summary_emb = embedder.embed_query(summary_text)
+            collection.upsert(
+                documents=[summary_text],
+                embeddings=[summary_emb],
+                metadatas=[{
+                    "source": "resume",
+                    "section": section_name,
+                    "domain": _infer_domain(section_name),
+                    "chunk_index": -1,           # -1 marks this as the meta-summary
+                    "is_summary": True,
+                    "ingested_at": datetime.utcnow().isoformat()
+                }],
+                ids=[summary_id]
+            )
+            total += 1
+            print(f"  [Resume] Section '{section_name}' skills-summary chunk: {len(summary_text)} chars")
 
     print(f"[Resume] Ingested {total} chunks total")
     return total
@@ -85,13 +163,26 @@ def _split_into_sections(text: str) -> dict:
 
     for line in lines:
         stripped = line.strip()
-        # Detect section headers: lines that are mostly uppercase, short, and not numbers
-        if (stripped
-                and len(stripped) > 2
-                and len(stripped) < 60
-                and stripped.upper() == stripped
-                and not stripped.isdigit()
-                and any(c.isalpha() for c in stripped)):
+        # Detect section headers. A line is a header if any of:
+        #   1. ALL-CAPS short line (e.g. "EDUCATION")
+        #   2. Lowercased form matches a known resume section name
+        #      (e.g. "Technical Skills", "Work Experience")
+        # It is NOT a header if it ends with ':' — those are sub-bullets
+        # like "Languages: Java, Python" that should stay inside the
+        # parent section.
+        is_all_caps = (
+            len(stripped) > 2
+            and len(stripped) < 60
+            and stripped.upper() == stripped
+            and not stripped.isdigit()
+            and any(c.isalpha() for c in stripped)
+        )
+        is_known_header = (
+            len(stripped) > 2
+            and len(stripped) < 60
+            and stripped.lower() in KNOWN_SECTION_HEADERS
+        )
+        if stripped and not stripped.endswith(":") and (is_all_caps or is_known_header):
             # Save previous section
             if current_content:
                 sections[current_section] = "\n".join(current_content)

@@ -1,0 +1,55 @@
+# Render Blueprint — Son of Anton Backend
+# https://render.com/docs/blueprint-spec
+#
+# Usage: Connect this repo in Render → "New Blueprint Instance".
+# Or apply via:  render blueprint launch
+#
+# Required environment variables (set in Render dashboard after first deploy):
+#   OPENAI_API_KEY, GITHUB_TOKEN, REDIS_URL, VAPI_API_KEY, VAPI_ASSISTANT_ID,
+#   VAPI_SERVER_SECRET, GOOGLE_TOKEN_JSON (one-time paste from local token.json)
+#
+# Optional:
+#   EXTRA_CORS_ORIGINS — comma-separated extra origins
+#   REHAN_EMAIL         — recruiter's email for calendar invites
+
+services:
+  - type: web
+    name: son-of-anton-api
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: CHROMA_PERSIST_PATH
+        value: /app/data/chroma
+      - key: OPENAI_CHAT_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_VOICE_MODEL
+        value: gpt-4o-mini
+      - key: GITHUB_REPOS
+        value: "Maverick-sst/Anton,Maverick-sst/odysseus,Maverick-sst/Doable,Maverick-sst/terax-ai,Maverick-sst/Stratum,Maverick-sst/DevForge,Maverick-sst/MisoTTS,Musharraf1128/Morph"
+      - key: RETRIEVAL_SCORE_THRESHOLD
+        value: "0.35"
+      - key: REHAN_EMAIL
+        value: rehan@example.com
+      # These are filled in Render dashboard — sync: false means "don't override on deploy"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: VAPI_API_KEY
+        sync: false
+      - key: VAPI_ASSISTANT_ID
+        sync: false
+      - key: VAPI_SERVER_SECRET
+        sync: false
+      - key: GOOGLE_TOKEN_JSON
+        sync: false
