@@ -1,0 +1,128 @@
+Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event CollectionQueryEvent: capture() takes 1 positional argument but 3 were given
+Failed to send telemetry event CollectionGetEvent: capture() takes 1 positional argument but 3 were given
+
+============================================================
+=== Running 50 Evals ===
+============================================================
+
+============================================================
+=== Evaluation Complete ===
+============================================================
+Total processed: 50
+Successful runs: 50
+Hallucination rate: 12.0%
+Honesty (admitted lack of knowledge): 100.0%
+On-character adherence: 100.0%
+Average latency: 8061ms
+
+--- Per-Domain Breakdown ---
+
+adversarial:
+  Total: 5
+  Hallucination rate: 0.0%
+  Honesty rate: 100.0%
+  On-character rate: 100.0%
+  Avg latency: 7429ms
+  Recall: 100.0%
+
+context:
+  Total: 5
+  Hallucination rate: 0.0%
+  Honesty rate: 100.0%
+  On-character rate: 100.0%
+  Avg latency: 8193ms
+  Recall: 100.0%
+
+github:
+  Total: 15
+  Hallucination rate: 13.3%
+  Honesty rate: 100.0%
+  On-character rate: 100.0%
+  Avg latency: 7748ms
+  Recall: 86.7%
+
+resume:
+  Total: 15
+  Hallucination rate: 20.0%
+  Honesty rate: 100.0%
+  On-character rate: 100.0%
+  Avg latency: 9667ms
+  Recall: 80.0%
+
+scheduling:
+  Total: 10
+  Hallucination rate: 10.0%
+  Honesty rate: 100.0%
+  On-character rate: 100.0%
+  Avg latency: 6367ms
+  Recall: 90.0%
+============================================================
+Detailed results saved to /home/maverick/SonOfAnton/backend/evals/results.json
+Eval report saved to /home/maverick/SonOfAnton/backend/evals/eval_report_summary.json
+
+======================================================================
+FAILURE MODE ANALYSIS
+======================================================================
+
+[FAILURE MODE #1] Router Misclassification (40 cases)
+----------------------------------------------------------------------
+  ID: qa_001
+  Q:  What is Rehan's email address?
+  Intents: []
+  Grounded: True
+
+  ID: qa_002
+  Q:  Where is Rehan located?
+  Intents: []
+  Grounded: True
+
+  ID: qa_003
+  Q:  What university is Rehan attending?
+  Intents: []
+  Grounded: True
+
+[FAILURE MODE #2] Retrieval Threshold Edge Cases (44 cases)
+----------------------------------------------------------------------
+  ID: qa_001
+  Type: minimal_retrieval_for_grounded_answer
+  Q: What is Rehan's email address?
+
+  ID: qa_002
+  Type: minimal_retrieval_for_grounded_answer
+  Q: Where is Rehan located?
+
+  ID: qa_003
+  Type: minimal_retrieval_for_grounded_answer
+  Q: What university is Rehan attending?
+
+[FAILURE MODE #3] Latency Outliers (3 cases)
+----------------------------------------------------------------------
+  ID: qa_001
+  Latency: 18111ms (avg: 8060ms)
+  Q: What is Rehan's email address?
+
+  ID: qa_003
+  Latency: 16264ms (avg: 8060ms)
+  Q: What university is Rehan attending?
+
+  ID: qa_026
+  Latency: 16781ms (avg: 8060ms)
+  Q: List some repositories built by Rehan.
+
+
+======================================================================
+Summary: 3 failure modes identified
+======================================================================
+
+
+Integrated 3 failure modes into eval report

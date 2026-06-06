@@ -1,0 +1,84 @@
+{
+  "chat": {
+    "total_questions": 50,
+    "hallucination_rate": 0.12,
+    "honesty_rate": 1.0,
+    "on_character_rate": 1.0,
+    "avg_latency_ms": 8060,
+    "by_domain": {
+      "resume": {
+        "total": 15,
+        "grounded": 12,
+        "avg_latency_ms": 9667
+      },
+      "github": {
+        "total": 15,
+        "grounded": 13,
+        "avg_latency_ms": 7748
+      },
+      "scheduling": {
+        "total": 10,
+        "grounded": 9,
+        "avg_latency_ms": 6367
+      },
+      "context": {
+        "total": 5,
+        "grounded": 5,
+        "avg_latency_ms": 8193
+      },
+      "adversarial": {
+        "total": 5,
+        "grounded": 5,
+        "avg_latency_ms": 7429
+      }
+    },
+    "retrieval": {
+      "precision": 0.0,
+      "recall": {
+        "resume": 0.8,
+        "github": 0.8666666666666667,
+        "scheduling": 0.9,
+        "context": 1.0,
+        "adversarial": 1.0
+      }
+    }
+  },
+  "voice": {
+    "first_response_latency_ms": 0,
+    "booking_success_rate": 0.0,
+    "test_calls_n": 0
+  },
+  "failure_modes": [
+    {
+      "id": 1,
+      "description": "Router misclassification on scheduling queries mid-flow",
+      "root_cause": "Keyword collision: generic verbs ('works', 'knows') trigger knowledge classifier during scheduling",
+      "evidence": "Found 40 cases where scheduling intent was not recognized",
+      "fix": "Strengthen STRONG_KNOWLEDGE_RE to require question mark or explicit wh- word in scheduling context",
+      "occurrence_rate": "40/50"
+    },
+    {
+      "id": 2,
+      "description": "Retrieval threshold (0.35) filters out relevant chunks or allows low-quality answers",
+      "root_cause": "Threshold is hardcoded; different domains/query types may need different sensitivity",
+      "evidence": "Found 44 cases of threshold-related retrieval failures",
+      "fix": "Implement adaptive threshold based on query domain (education=0.4, projects=0.3, personal=0.35)",
+      "occurrence_rate": "44/50"
+    },
+    {
+      "id": 3,
+      "description": "Latency spikes on certain query patterns",
+      "root_cause": "LLM fallback in router / expensive embedding + reranking on long documents",
+      "evidence": "Found 3 queries > 2x average latency",
+      "fix": "Implement LLM caching for router decisions; consider lightweight embeddings for projects domain",
+      "occurrence_rate": "3/50"
+    }
+  ],
+  "tradeoff": {
+    "description": "Hybrid RAG: static cache + live GitHub fallback vs always-live retrieval",
+    "chosen": "Hybrid",
+    "reason": "Optimize for latency while maintaining freshness via GitHub fallback",
+    "measured_delta_ms": 0
+  },
+  "future_2_weeks": ""
+}
